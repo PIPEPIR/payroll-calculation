@@ -1,0 +1,44 @@
+name: Testing (Unit & E2E)
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Unit Tests with pytest
+        run: |
+          pytest tests/test_payroll.py
+
+      - name: Run Streamlit app in background
+        run: |
+          streamlit run app.py &
+          sleep 5  # Give Streamlit time to start up
+
+      - name: Run E2E tests with Robot Framework
+        run: |
+          robot -d results tests/e2e_payroll.robot
+
+      - name: Upload Robot Framework results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: robot-results
+          path: results/
