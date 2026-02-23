@@ -9,7 +9,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # Replace with your Streamlit app URL
-APP_URL = os.environ.get("STREAMLIT_APP_URL", "https://payroll-calculation-01.streamlit.app/")
+env_url = os.environ.get("STREAMLIT_APP_URL", "").strip()
+APP_URL = env_url if env_url else "https://payroll-calculation-01.streamlit.app/"
 
 def wake_up():
     print(f"Opening {APP_URL}...")
