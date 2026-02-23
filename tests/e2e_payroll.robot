@@ -1,0 +1,26 @@
+*** Settings ***
+Library           SeleniumLibrary
+Suite Setup       Open Browser    ${APP_URL}    ${BROWSER}
+Suite Teardown    Close Browser
+
+*** Variables ***
+${APP_URL}        http://localhost:8501
+${BROWSER}        headlesschrome
+
+*** Test Cases ***
+Verify App Is Running
+    [Documentation]    Test that the Streamlit app loads correctly and shows the main title.
+    Maximize Browser Window
+    Wait Until Page Contains    ระบบคิดเงินเดือน    timeout=10s
+    Title Should Be    ระบบคิดเงินเดือนร้านอาหาร
+    
+Verify Shift Information Displayed
+    [Documentation]    Verify the shift rules are displayed correctly.
+    Page Should Contain    พนักงานประจำ: เริ่ม 14.00 น.
+    Page Should Contain    พาร์ทไทม์: เริ่ม 16.00 น.
+
+Check Tab Configurations
+    [Documentation]    Verify the tabs are present.
+    Page Should Contain    พนักงานประจำ
+    Page Should Contain    พาร์ทไทม์
+    Page Should Contain    กำหนดเอง

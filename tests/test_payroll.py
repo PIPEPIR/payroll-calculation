@@ -1,6 +1,10 @@
 import unittest
 import pandas as pd
 import sys
+import os
+
+# Add parent directory to sys.path to allow importing from app.py
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Mock Streamlit UI
 class MockSessionState(dict):
