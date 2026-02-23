@@ -16,11 +16,11 @@ Verify App Is Running
     
 Verify Shift Information Displayed
     [Documentation]    Verify the shift rules are displayed correctly.
-    Page Should Contain    พนักงานประจำ: เริ่ม 14.00 น.
-    Page Should Contain    พาร์ทไทม์: เริ่ม 16.00 น.
+    Wait Until Page Contains    พนักงานประจำ: เริ่ม 14.00 น.    timeout=10s
+    Wait Until Page Contains    พาร์ทไทม์: เริ่ม 16.00 น.    timeout=10s
 
 Check Tab Configurations
     [Documentation]    Verify the tabs are present.
-    Page Should Contain    พนักงานประจำ
-    Page Should Contain    พาร์ทไทม์
-    Page Should Contain    กำหนดเอง
+    Wait Until Page Contains    พนักงานประจำ    timeout=10s
+    Wait Until Page Contains    พาร์ทไทม์    timeout=10s
+    Wait Until Page Contains    กำหนดเอง    timeout=10s
