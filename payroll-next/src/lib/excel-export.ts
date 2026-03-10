@@ -33,7 +33,7 @@ export interface EmployeeSummary {
  * Export summary data to Excel
  */
 export async function exportSummaryToExcel(
-  summaries: EmployeeSummary[]
+  summaries: EmployeeSummary[],
 ): Promise<Blob> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("สรุปยอดจ่ายเงิน");
@@ -98,10 +98,11 @@ export async function exportSummaryToExcel(
   worksheet.columns.forEach((col, i) => {
     if (col) {
       let maxLen = 0;
-      col.eachCell && col.eachCell({ includeEmpty: true }, (cell) => {
-        const len = cell.value ? String(cell.value).length : 0;
-        maxLen = Math.max(maxLen, len);
-      });
+      col.eachCell &&
+        col.eachCell({ includeEmpty: true }, (cell) => {
+          const len = cell.value ? String(cell.value).length : 0;
+          maxLen = Math.max(maxLen, len);
+        });
       col.width = maxLen + 5;
     }
   });
@@ -118,7 +119,7 @@ export async function exportSummaryToExcel(
 export async function exportIndividualExcel(
   empName: string,
   records: DailyRecord[],
-  periodText: string = ""
+  periodText: string = "",
 ): Promise<Blob> {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("เงินเดือน");
@@ -148,15 +149,19 @@ export async function exportIndividualExcel(
   };
 
   // Header rows
-  worksheet.mergeCells("A1:G1");
-  worksheet.getCell("A1").value = `เงินเดือนพนักงานติดมันส์สาขาหาดใหญ่ ${empName}`;
+  worksheet.mergeCells("A1:J1");
+  worksheet.getCell("A1").value =
+    `เงินเดือนพนักงานติดมันส์สาขาหาดใหญ่ ${empName}`;
   worksheet.getCell("A1").font = titleFont;
 
-  worksheet.mergeCells("A2:G2");
-  worksheet.getCell("A2").value = "โทร: .......................................";
+  worksheet.mergeCells("A2:J2");
+  worksheet.getCell("A2").value =
+    "โทร: .......................................";
 
   worksheet.mergeCells("A3:C3");
-  worksheet.getCell("A3").value = periodText ? `วันที่ ${periodText}` : "วันที่ ........................";
+  worksheet.getCell("A3").value = periodText
+    ? `วันที่ ${periodText}`
+    : "วันที่ ........................";
   worksheet.getCell("E3").value = "เงินสด";
 
   // Column headers (row 5)
@@ -170,6 +175,7 @@ export async function exportIndividualExcel(
     "รวมเงิน",
     "เบิกเงิน",
     "เหลือสุทธิ",
+    "หมายเหตุ",
   ];
 
   const headerRow = worksheet.addRow(colHeaders);
@@ -180,11 +186,13 @@ export async function exportIndividualExcel(
     cell.border = thinBorder;
   });
 
-  // Data rows
-  let lastRow = 5;
+  // Data rows — derive row numbers from actual header position
+  const firstDataRowNum = headerRow.number + 1;
+  let lastDataRowNum = headerRow.number; // fallback if no records
+
   for (let i = 0; i < records.length; i++) {
-    const rowIdx = 6 + i;
-    lastRow = rowIdx;
+    const rowIdx = firstDataRowNum + i;
+    lastDataRowNum = rowIdx;
     const rec = records[i];
 
     const values = [
@@ -194,58 +202,69 @@ export async function exportIndividualExcel(
       rec.checkInTime,
       rec.basePay,
       rec.tip,
-      `=E${rowIdx}+F${rowIdx}`,
-      rec.advance,
-      `=G${rowIdx}-H${rowIdx}`,
+      { formula: `E${rowIdx}+F${rowIdx}` },
+      parseFloat(String(rec.advance)) || 0,
+      { formula: `IFERROR(G${rowIdx}-H${rowIdx},0)` },
+      "",
     ];
 
     const row = worksheet.addRow(values);
-    row.eachCell((cell, colNum) => {
+    row.eachCell((cell) => {
       cell.border = thinBorder;
-      if (colNum >= 3) {
-        cell.alignment = centerAlignment;
-      }
+      cell.alignment = centerAlignment;
     });
   }
 
   // Summary row
-  const summaryRow = lastRow + 1;
-  if (lastRow >= 6) {
-    worksheet.getCell(`B${summaryRow}`).value = `รวม ${periodText}`.trim();
-    worksheet.getCell(`B${summaryRow}`).alignment = centerAlignment;
-    worksheet.getCell(`E${summaryRow}`).value = { formula: `SUM(E6:E${lastRow})` };
-    worksheet.getCell(`F${summaryRow}`).value = { formula: `SUM(F6:F${lastRow})` };
-    worksheet.getCell(`G${summaryRow}`).value = { formula: `SUM(G6:G${lastRow})` };
-    worksheet.getCell(`H${summaryRow}`).value = { formula: `SUM(H6:H${lastRow})` };
-    worksheet.getCell(`I${summaryRow}`).value = { formula: `SUM(I6:I${lastRow})` };
-  }
-
-  for (let c = 1; c <= 9; c++) {
-    const cell = worksheet.getCell(summaryRow, c);
-    cell.border = thinBorder;
+  if (lastDataRowNum >= firstDataRowNum) {
+    const summaryRowObj = worksheet.addRow([
+      "",
+      `รวม ${periodText}`.trim(),
+      "",
+      "",
+      { formula: `SUM(E${firstDataRowNum}:E${lastDataRowNum})` },
+      { formula: `SUM(F${firstDataRowNum}:F${lastDataRowNum})` },
+      { formula: `SUM(G${firstDataRowNum}:G${lastDataRowNum})` },
+      { formula: `SUM(H${firstDataRowNum}:H${lastDataRowNum})` },
+      { formula: `SUM(I${firstDataRowNum}:I${lastDataRowNum})` },
+      "",
+    ]);
+    summaryRowObj.eachCell((cell) => {
+      cell.border = thinBorder;
+      cell.alignment = centerAlignment;
+    });
   }
 
   // Empty rows for spacing
-  for (let r = summaryRow + 1; r <= summaryRow + 2; r++) {
-    for (let c = 1; c <= 9; c++) {
-      worksheet.getCell(r, c).border = thinBorder;
-    }
+  for (let s = 0; s < 2; s++) {
+    const emptyRow = worksheet.addRow(Array(10).fill(""));
+    emptyRow.eachCell((cell) => {
+      cell.border = thinBorder;
+    });
   }
 
   // Signature row
-  const sigRow = summaryRow + 3;
-  worksheet.getCell(`B${sigRow}`).value = "ลายเซ็นต์รับเงิน";
-  worksheet.getCell(`B${sigRow}`).alignment = centerAlignment;
-  worksheet.getCell(`G${sigRow}`).value = "วันที่";
-  worksheet.getCell(`G${sigRow}`).alignment = centerAlignment;
-  for (let c = 1; c <= 9; c++) {
-    worksheet.getCell(sigRow, c).border = thinBorder;
-  }
+  const sigRow = worksheet.addRow([
+    "",
+    "ลายเซ็นต์รับเงิน",
+    "",
+    "",
+    "",
+    "",
+    "วันที่",
+    "",
+    "",
+    "",
+  ]);
+  sigRow.eachCell((cell) => {
+    cell.border = thinBorder;
+    cell.alignment = centerAlignment;
+  });
 
   // Column widths
-  const colWidths = [14, 20, 14, 14, 12, 8, 12, 10, 12];
-  colWidths.forEach((width, i) => {
-    worksheet.getColumn(i + 1).width = width;
+  const colWidths = [14, 20, 14, 14, 12, 8, 12, 10, 12, 20];
+  colWidths.forEach((width, idx) => {
+    worksheet.getColumn(idx + 1).width = width;
   });
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -259,7 +278,7 @@ export async function exportIndividualExcel(
  */
 export async function exportAllEmployeesExcel(
   employeesData: { empName: string; records: DailyRecord[] }[],
-  periodText: string = ""
+  periodText: string = "",
 ): Promise<Blob> {
   const workbook = new ExcelJS.Workbook();
 
@@ -289,25 +308,25 @@ export async function exportAllEmployeesExcel(
 
   for (let idx = 0; idx < employeesData.length; idx++) {
     const { empName, records } = employeesData[idx];
-    const sheetTitle = empName.replace(/[\/\\]/g, "-").substring(0, 31) || `Employee_${idx + 1}`;
+    const sheetTitle =
+      empName.replace(/[\/\\]/g, "-").substring(0, 31) || `Employee_${idx + 1}`;
 
-    let worksheet: ExcelJS.Worksheet;
-    if (idx === 0) {
-      worksheet = workbook.addWorksheet(sheetTitle);
-    } else {
-      worksheet = workbook.addWorksheet(sheetTitle);
-    }
+    const worksheet = workbook.addWorksheet(sheetTitle);
 
     // Header rows
-    worksheet.mergeCells("A1:G1");
-    worksheet.getCell("A1").value = `เงินเดือนพนักงานติดมันส์สาขาหาดใหญ่ ${empName}`;
+    worksheet.mergeCells("A1:J1");
+    worksheet.getCell("A1").value =
+      `เงินเดือนพนักงานติดมันส์สาขาหาดใหญ่ ${empName}`;
     worksheet.getCell("A1").font = titleFont;
 
-    worksheet.mergeCells("A2:G2");
-    worksheet.getCell("A2").value = "โทร: .......................................";
+    worksheet.mergeCells("A2:J2");
+    worksheet.getCell("A2").value =
+      "โทร: .......................................";
 
     worksheet.mergeCells("A3:C3");
-    worksheet.getCell("A3").value = periodText ? `วันที่ ${periodText}` : "วันที่ ........................";
+    worksheet.getCell("A3").value = periodText
+      ? `วันที่ ${periodText}`
+      : "วันที่ ........................";
     worksheet.getCell("E3").value = "เงินสด";
 
     // Column headers
@@ -321,6 +340,7 @@ export async function exportAllEmployeesExcel(
       "รวมเงิน",
       "เบิกเงิน",
       "เหลือสุทธิ",
+      "หมายเหตุ",
     ];
 
     const headerRow = worksheet.addRow(colHeaders);
@@ -331,11 +351,13 @@ export async function exportAllEmployeesExcel(
       cell.border = thinBorder;
     });
 
-    // Data rows
-    let lastRow = 5;
+    // Data rows — derive row numbers from actual header position
+    const firstDataRowNum = headerRow.number + 1;
+    let lastDataRowNum = headerRow.number; // fallback if no records
+
     for (let i = 0; i < records.length; i++) {
-      const rowIdx = 6 + i;
-      lastRow = rowIdx;
+      const rowIdx = firstDataRowNum + i;
+      lastDataRowNum = rowIdx;
       const rec = records[i];
 
       const values = [
@@ -344,58 +366,70 @@ export async function exportAllEmployeesExcel(
         rec.date,
         rec.checkInTime,
         rec.basePay,
-        rec.tip,
-        `=E${rowIdx}+F${rowIdx}`,
-        rec.advance,
-        `=G${rowIdx}-H${rowIdx}`,
+        0,
+        { formula: `E${rowIdx}+F${rowIdx}` },
+        0,
+        { formula: `IFERROR(G${rowIdx}-H${rowIdx},0)` },
+        "",
       ];
 
       const row = worksheet.addRow(values);
-      row.eachCell((cell, colNum) => {
+      row.eachCell((cell) => {
         cell.border = thinBorder;
-        if (colNum >= 3) {
-          cell.alignment = centerAlignment;
-        }
+        cell.alignment = centerAlignment;
       });
     }
 
     // Summary row
-    const summaryRow = lastRow + 1;
-    if (lastRow >= 6) {
-      worksheet.getCell(`B${summaryRow}`).value = `รวม ${periodText}`.trim();
-      worksheet.getCell(`B${summaryRow}`).alignment = centerAlignment;
-      worksheet.getCell(`E${summaryRow}`).value = { formula: `SUM(E6:E${lastRow})` };
-      worksheet.getCell(`F${summaryRow}`).value = { formula: `SUM(F6:F${lastRow})` };
-      worksheet.getCell(`G${summaryRow}`).value = { formula: `SUM(G6:G${lastRow})` };
-      worksheet.getCell(`H${summaryRow}`).value = { formula: `SUM(H6:H${lastRow})` };
-      worksheet.getCell(`I${summaryRow}`).value = { formula: `SUM(I6:I${lastRow})` };
-    }
-
-    for (let c = 1; c <= 9; c++) {
-      worksheet.getCell(summaryRow, c).border = thinBorder;
+    if (lastDataRowNum >= firstDataRowNum) {
+      const summaryRowObj = worksheet.addRow([
+        "",
+        `รวม ${periodText}`.trim(),
+        "",
+        "",
+        { formula: `SUM(E${firstDataRowNum}:E${lastDataRowNum})` },
+        { formula: `SUM(F${firstDataRowNum}:F${lastDataRowNum})` },
+        { formula: `SUM(G${firstDataRowNum}:G${lastDataRowNum})` },
+        { formula: `SUM(H${firstDataRowNum}:H${lastDataRowNum})` },
+        { formula: `SUM(I${firstDataRowNum}:I${lastDataRowNum})` },
+        "",
+      ]);
+      summaryRowObj.eachCell((cell) => {
+        cell.border = thinBorder;
+        cell.alignment = centerAlignment;
+      });
     }
 
     // Empty rows
-    for (let r = summaryRow + 1; r <= summaryRow + 2; r++) {
-      for (let c = 1; c <= 9; c++) {
-        worksheet.getCell(r, c).border = thinBorder;
-      }
+    for (let s = 0; s < 2; s++) {
+      const emptyRow = worksheet.addRow(Array(10).fill(""));
+      emptyRow.eachCell((cell) => {
+        cell.border = thinBorder;
+      });
     }
 
     // Signature row
-    const sigRow = summaryRow + 3;
-    worksheet.getCell(`B${sigRow}`).value = "ลายเซ็นต์รับเงิน";
-    worksheet.getCell(`B${sigRow}`).alignment = centerAlignment;
-    worksheet.getCell(`G${sigRow}`).value = "วันที่";
-    worksheet.getCell(`G${sigRow}`).alignment = centerAlignment;
-    for (let c = 1; c <= 9; c++) {
-      worksheet.getCell(sigRow, c).border = thinBorder;
-    }
+    const sigRow = worksheet.addRow([
+      "",
+      "ลายเซ็นต์รับเงิน",
+      "",
+      "",
+      "",
+      "",
+      "วันที่",
+      "",
+      "",
+      "",
+    ]);
+    sigRow.eachCell((cell) => {
+      cell.border = thinBorder;
+      cell.alignment = centerAlignment;
+    });
 
     // Column widths
-    const colWidths = [14, 20, 14, 14, 12, 8, 12, 10, 12];
-    colWidths.forEach((width, i) => {
-      worksheet.getColumn(i + 1).width = width;
+    const colWidths = [14, 20, 14, 14, 12, 8, 12, 10, 12, 20];
+    colWidths.forEach((width, idx) => {
+      worksheet.getColumn(idx + 1).width = width;
     });
   }
 

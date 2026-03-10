@@ -25,12 +25,12 @@ const steps: StepsProps["items"] = [
 
 export default function StepIndicator({ currentStep }: StepIndicatorProps) {
   return (
-    <div className="mb-6">
+    <div className="mb-8 px-4 py-5 bg-white rounded-xl border border-gray-100 shadow-sm">
       <Steps
         current={currentStep - 1}
         items={steps}
         size="small"
-        style={{ maxWidth: 600, margin: '0 auto' }}
+        style={{ maxWidth: 560, margin: '0 auto' }}
       />
     </div>
   );

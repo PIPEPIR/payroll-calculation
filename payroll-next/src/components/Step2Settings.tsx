@@ -241,7 +241,7 @@ export default function Step2Settings({
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <Title level={2} className="mb-4">⚙️ ตั้งค่าค่าจ้างพนักงาน</Title>
+        <Title level={3} className="mb-4 font-semibold text-gray-800">ตั้งค่าค่าจ้างพนักงาน</Title>
         
         <Space className="mb-4">
           <Button
@@ -346,13 +346,13 @@ export default function Step2Settings({
           onClick={handleConfirm}
           className="flex-1"
         >
-          ✅ ยืนยันและคำนวณเงินเดือน
+          ยืนยันและคำนวณเงินเดือน
         </Button>
         <Button
           size="large"
           onClick={onBack}
         >
-          🔙 กลับไปอัปโหลดใหม่
+          กลับไปอัปโหลดใหม่
         </Button>
       </Space>
 

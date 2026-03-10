@@ -33,7 +33,7 @@ import "@univerjs/docs-ui/lib/index.css";
 import "@univerjs/sheets-ui/lib/index.css";
 import "@univerjs/sheets-formula-ui/lib/index.css";
 import "@univerjs/sheets-numfmt-ui/lib/index.css";
-import { Typography, Button } from "antd";
+import { Typography, Button, Skeleton } from "antd";
 import { EditOutlined, DownloadOutlined, CloseOutlined, PrinterOutlined } from "@ant-design/icons";
 
 interface UniverSheetEditorProps {
@@ -73,6 +73,7 @@ export const UniverSheetEditor: React.FC<UniverSheetEditorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const univerRef = useRef<Univer | null>(null);
   const snapshotRef = useRef<IWorkbookData | null>(null);
+  const [isSheetLoaded, setIsSheetLoaded] = React.useState(false);
 
   const handlePrint = () => {
     const snapshot = snapshotRef.current;
@@ -208,12 +209,14 @@ export const UniverSheetEditor: React.FC<UniverSheetEditorProps> = ({
         if (univerRef.current) {
           snapshotRef.current = univerData;
           univerRef.current.createUnit(UniverInstanceType.UNIVER_SHEET, univerData);
+          setIsSheetLoaded(true);
         }
       },
       (error) => {
         console.error("Excel import error:", error);
         snapshotRef.current = WORKBOOK_DATA;
         univerRef.current?.createUnit(UniverInstanceType.UNIVER_SHEET, WORKBOOK_DATA);
+        setIsSheetLoaded(true);
       },
     );
   };
@@ -262,6 +265,7 @@ export const UniverSheetEditor: React.FC<UniverSheetEditorProps> = ({
       } else {
         snapshotRef.current = WORKBOOK_DATA;
         instance.createUnit(UniverInstanceType.UNIVER_SHEET, WORKBOOK_DATA);
+        setIsSheetLoaded(true);
       }
     });
 
@@ -274,6 +278,7 @@ export const UniverSheetEditor: React.FC<UniverSheetEditorProps> = ({
       const instance = univerRef.current;
       univerRef.current = null;
       snapshotRef.current = null;
+      setIsSheetLoaded(false);
       setTimeout(() => instance.dispose(), 0);
     }
   }, [open]);
@@ -348,7 +353,23 @@ export const UniverSheetEditor: React.FC<UniverSheetEditorProps> = ({
         </div>
 
         {/* Univer container — takes all remaining height */}
-        <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
+        <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+          {!isSheetLoaded && (
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              background: "#fff",
+              zIndex: 10,
+              padding: "32px 40px",
+              overflowY: "auto",
+            }}>
+              <Skeleton active paragraph={{ rows: 4 }} className="mb-6" />
+              <Skeleton active paragraph={{ rows: 6 }} className="mb-6" />
+              <Skeleton active paragraph={{ rows: 6 }} />
+            </div>
+          )}
+          <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+        </div>
 
         {/* Footer */}
         <div

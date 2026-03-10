@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState } from 'react';
-import { Upload, Card, Progress, Collapse, Space, Tag, Statistic, Row, Col, Alert, Typography } from 'antd';
+import { Upload, Card, Spin, Collapse, Space, Tag, Statistic, Row, Col, Alert, Typography } from 'antd';
 import type { UploadProps } from 'antd';
 import {
   InboxOutlined,
@@ -82,7 +82,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <Title level={2} className="mb-2">📄 อัปโหลดไฟล์ PDF ข้อมูลตอกบัตร</Title>
+        <Title level={3} className="mb-2 font-semibold text-gray-800">อัปโหลดไฟล์ PDF ข้อมูลตอกบัตร</Title>
         <Alert
           title={
             <div>
@@ -113,9 +113,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       </Dragger>
 
       {isProcessing && (
-        <div className="text-center py-4">
-          <Progress type="circle" percent={100} format={() => null} strokeColor="#FF6B00" className="animate-spin" />
-          <Text className="block mt-2 text-gray-600">กำลังอ่านและตรวจสอบข้อมูลจากไฟล์...</Text>
+        <div className="flex flex-col items-center py-8 gap-3">
+          <Spin size="large" />
+          <Text className="text-gray-500 text-sm">กำลังอ่านและตรวจสอบข้อมูลจากไฟล์...</Text>
         </div>
       )}
 

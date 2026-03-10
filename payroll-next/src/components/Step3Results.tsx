@@ -1,12 +1,17 @@
 "use client";
 
 import React, { useState } from "react";
+import dayjs from "dayjs";
 import {
   DownloadOutlined,
   WarningOutlined,
   FileExcelOutlined,
   TeamOutlined,
   UserOutlined,
+  ExclamationCircleOutlined,
+  EyeOutlined,
+  CloseCircleOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import {
   Card,
@@ -18,11 +23,13 @@ import {
   Tag,
   Typography,
   Statistic,
+  Modal,
+  DatePicker,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { DailyRecord, EmployeeSummary, EmployeeDetail } from "@/types";
 import { UniverSheetEditor } from "@/components/common";
-import { useExcelGenerator } from "@/hooks/useExcelGenerator";
+import { exportAllEmployeesExcel } from "@/lib/excel-export";
 
 const { Title, Text } = Typography;
 
@@ -44,11 +51,13 @@ export default function Step3Results({
   onExportAll,
 }: Step3ResultsProps) {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
-  const [periodText, setPeriodText] = useState("");
+  const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorExcelData, setEditorExcelData] = useState<string | null>(null);
 
-  const { isGenerating, generateExcel, downloadExcel } = useExcelGenerator();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const grandTotal = summaries.reduce((sum, s) => sum + s.netPay, 0);
   const selectedDetail = details.find((d) => d.empName === selectedEmployee);
@@ -58,37 +67,74 @@ export default function Step3Results({
     (sum, d) => sum + d.autoCheckoutDays.length,
     0,
   );
-  const totalForgotCheckin = details.reduce(
-    (sum, d) => sum + d.forgotCheckinDays.length,
-    0,
+  const forgotCheckinEmployees = details.filter(
+    (d) => d.forgotCheckinDays.length > 0,
   );
-  const hasWarnings = totalAutoCheckout > 0 || totalForgotCheckin > 0;
 
-  // Open UniverSheet editor
-  const handleOpenEditor = async () => {
-    try {
-      // Generate Excel data from Python
-      const excelBase64 = await generateExcel("all", {
-        employees: details.map((d) => ({
-          emp_name: d.empName,
-          records: d.records,
-        })),
-        period_text: periodText,
-      });
-      setEditorExcelData(excelBase64);
-      setIsEditorOpen(true);
-    } catch (error) {
-      console.error("Failed to generate Excel for editor:", error);
+  // Format date range as Thai: "16-31 ธ.ค. 68"
+  const formatPeriodText = (range: [dayjs.Dayjs, dayjs.Dayjs] | null): string => {
+    if (!range) return "";
+    const [start, end] = range;
+    const monthsThai = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const startMonth = monthsThai[start.month()];
+    const endMonth = monthsThai[end.month()];
+    // Buddhist Era year (พ.ศ.) - last 2 digits only
+    const startYear = ((start.year() + 543) % 100);
+    const endYear = ((end.year() + 543) % 100);
+    
+    if (start.month() === end.month() && start.year() === end.year()) {
+      return `${start.date()}-${end.date()} ${startMonth} ${startYear}`;
+    } else if (start.year() === end.year()) {
+      return `${start.date()} ${startMonth} - ${end.date()} ${endMonth} ${endYear}`;
+    } else {
+      return `${start.date()} ${startMonth} ${startYear} - ${end.date()} ${endMonth} ${endYear}`;
     }
   };
 
-  // Export from UniverSheet
-  const handleExportFromEditor = async (excelBase64: string) => {
-    downloadExcel(
-      excelBase64,
-      `เงินเดือนพนักงานทุกคน_${periodText || new Date().toISOString().split("T")[0]}.xlsx`,
-    );
-    setIsEditorOpen(false);
+  const periodText = formatPeriodText(dateRange);
+
+  const openEmployeeDetail = (empName: string, targetDate?: string) => {
+    setSelectedEmployee(empName);
+    setHighlightedDate(targetDate || null);
+    setIsDetailModalOpen(true);
+  };
+
+  const closeEmployeeDetail = () => {
+    setIsDetailModalOpen(false);
+    setTimeout(() => {
+      setHighlightedDate(null);
+    }, 200);
+  };
+
+  const downloadBase64Excel = (base64: string, filename: string) => {
+    const link = document.createElement("a");
+    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
+    link.download = filename;
+    link.click();
+  };
+
+  // Open UniverSheet editor — fully client-side, no API call
+  const handleOpenEditor = async () => {
+    try {
+      setIsGenerating(true);
+      const blob = await exportAllEmployeesExcel(
+        details.map((d) => ({ empName: d.empName, records: d.records })),
+        periodText,
+      );
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () =>
+          resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      setEditorExcelData(base64);
+      setIsEditorOpen(true);
+    } catch (error) {
+      console.error("Failed to generate Excel for editor:", error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const summaryColumns: ColumnsType<EmployeeSummary> = [
@@ -97,16 +143,22 @@ export default function Step3Results({
       dataIndex: "name",
       key: "name",
       fixed: "left",
-      width: 200,
+      width: 220,
       render: (name: string, record) => (
-        <a
-          onClick={() =>
-            setSelectedEmployee(selectedEmployee === name ? null : name)
-          }
-          style={{ color: selectedEmployee === name ? "#FF6B00" : undefined }}
+        <span
+          onClick={() => openEmployeeDetail(name)}
+          style={{
+            color: "#1890ff",
+            cursor: "pointer",
+            fontWeight: 600,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
         >
+          <EyeOutlined />
           {name}
-        </a>
+        </span>
       ),
     },
     {
@@ -210,42 +262,160 @@ export default function Step3Results({
       key: "note",
       ellipsis: true,
       width: 200,
-      render: (note: string) => (
-        <Text type="secondary" style={{ fontSize: "12px" }}>
-          {note || "-"}
-        </Text>
-      ),
+      render: (note: string, record) => {
+        if (!note)
+          return (
+            <Text type="secondary" style={{ fontSize: "12px" }}>
+              -
+            </Text>
+          );
+
+        // Forgot to clock in - critical (red with close icon)
+        if (note.includes("ลืมตอกบัตรเข้างาน")) {
+          return (
+            <Tag
+              color="red"
+              icon={<CloseCircleOutlined />}
+              style={{ fontWeight: 600 }}
+            >
+              ลืมตอกบัตรเข้างาน
+            </Tag>
+          );
+        }
+
+        // Auto-checkout - warning (orange with clock icon)
+        if (note.includes("เติม checkout") || note.includes("อัตโนมัติ")) {
+          return (
+            <Tag color="orange" icon={<ClockCircleOutlined />}>
+              เติม checkout 23:59
+            </Tag>
+          );
+        }
+
+        return (
+          <Text type="secondary" style={{ fontSize: "12px" }}>
+            {note}
+          </Text>
+        );
+      },
     },
   ];
 
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <Title level={2}>📊 ผลการคำนวณเงินเดือน</Title>
+        <Title level={3} className="font-semibold text-gray-800">
+          ผลการคำนวณเงินเดือน
+        </Title>
       </div>
 
-      {/* Warnings */}
-      {hasWarnings && (
+      {/* Critical: Forgot check-in */}
+      {forgotCheckinEmployees.length > 0 && (
         <Alert
-          title={
-            <Space orientation="vertical" style={{ width: "100%" }}>
-              {totalAutoCheckout > 0 && (
-                <Text>
-                  ⚠️ มี <strong>{totalAutoCheckout}</strong> วันที่ระบบเติม
-                  checkout อัตโนมัติ
-                </Text>
-              )}
-              {totalForgotCheckin > 0 && (
-                <Text>
-                  ⚠️ มี <strong>{totalForgotCheckin}</strong>{" "}
-                  วันที่พนักงานลืมตอกบัตรเข้างาน
-                </Text>
-              )}
-            </Space>
+          type="error"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          description={
+            <div>
+              <Text strong style={{ color: "#cf1322" }}>
+                พบพนักงานลืมตอกบัตรเข้างาน — ข้ามการคำนวณวันดังกล่าว
+              </Text>
+              <div style={{ marginTop: 8 }}>
+                {forgotCheckinEmployees.map((d) => (
+                  <div
+                    key={d.empName}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEmployeeDetail(d.empName);
+                    }}
+                    style={{
+                      marginBottom: 8,
+                      padding: "10px 14px",
+                      backgroundColor: "#fff1f0",
+                      borderRadius: "6px",
+                      border: "1px solid #ffa39e",
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+                      e.currentTarget.style.backgroundColor = "#fff1f0";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      <span
+                        onClick={() => openEmployeeDetail(d.empName)}
+                        style={{
+                          color: "#d4380d",
+                          fontWeight: 700,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <EyeOutlined />
+                        {d.empName}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 400,
+                          color: "#666",
+                        }}
+                      >
+                        (คลิกชื่อเพื่อดูรายละเอียด)
+                      </span>
+                    </div>
+                    <div
+                      style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}
+                    >
+                      {d.forgotCheckinDays.map((date) => (
+                        <Button
+                          key={date}
+                          size="small"
+                          danger
+                          icon={<CloseCircleOutlined />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEmployeeDetail(d.empName, date);
+                          }}
+                        >
+                          {date}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           }
+        />
+      )}
+
+      {/* Warning: Auto-checkout */}
+      {totalAutoCheckout > 0 && (
+        <Alert
           type="warning"
           showIcon
           icon={<WarningOutlined />}
+          description={
+            <Text>
+              มี <strong>{totalAutoCheckout}</strong> วันที่ระบบเติม checkout
+              อัตโนมัติ (23:59:59)
+            </Text>
+          }
         />
       )}
 
@@ -275,64 +445,94 @@ export default function Step3Results({
           size="small"
           scroll={{ y: 300 }}
           onRow={(record) => ({
-            onClick: () =>
-              setSelectedEmployee(
-                selectedEmployee === record.name ? null : record.name,
-              ),
+            onClick: () => openEmployeeDetail(record.name),
             style: {
               cursor: "pointer",
-              backgroundColor:
-                selectedEmployee === record.name ? "#fff7e6" : undefined,
+              transition: "background-color 0.2s",
             },
+            className: "hover:bg-orange-50",
           })}
         />
       </Card>
 
-      {/* Employee Detail View */}
-      {selectedDetail && (
-        <Card
-          title={
-            <Space>
-              <UserOutlined />
-              <Text strong>รายละเอียด: {selectedDetail.empName}</Text>
-            </Space>
-          }
-          extra={
+      {/* Employee Detail Modal */}
+      <Modal
+        title={
+          <Space>
+            <UserOutlined />
+            <Text strong>รายละเอียด: {selectedDetail?.empName}</Text>
+            {highlightedDate && (
+              <Tag color="orange" style={{ marginLeft: 8 }}>
+                กำลังดูวันที่: {highlightedDate}
+              </Tag>
+            )}
+          </Space>
+        }
+        open={isDetailModalOpen}
+        onCancel={closeEmployeeDetail}
+        width={900}
+        footer={
+          <Space>
+            {highlightedDate && (
+              <Button
+                size="small"
+                onClick={() => setHighlightedDate(null)}
+                icon={<CloseCircleOutlined />}
+              >
+                ล้างการเน้น
+              </Button>
+            )}
             <Button
               type="primary"
-              size="small"
               icon={<DownloadOutlined />}
-              onClick={() => onExportIndividual(selectedDetail.empName)}
+              onClick={() => {
+                if (selectedDetail) {
+                  onExportIndividual(selectedDetail.empName);
+                }
+              }}
             >
               ดาวน์โหลด Excel
             </Button>
-          }
-        >
-          <Table
-            columns={detailColumns}
-            dataSource={selectedDetail.records}
-            rowKey="date"
-            pagination={false}
-            size="small"
-            scroll={{ y: 300 }}
-            footer={() => (
-              <Space
-                className="w-full"
-                style={{ display: "flex", justifyContent: "space-between" }}
-              >
-                <Space>
-                  <Tag color="blue">{selectedDetail.totalDays} วัน</Tag>
-                  <Tag color="green">{selectedDetail.totalHours} ชม.</Tag>
-                  <Tag color="red">หัก: {selectedDetail.totalPenalty} บาท</Tag>
-                </Space>
-                <Text strong style={{ color: "#52c41a", fontSize: "16px" }}>
-                  สุทธิ: {selectedDetail.netPay.toLocaleString()} บาท
-                </Text>
+          </Space>
+        }
+      >
+        <Table
+          columns={detailColumns}
+          dataSource={selectedDetail?.records}
+          rowKey="date"
+          pagination={false}
+          size="small"
+          scroll={{ y: 500 }}
+          onRow={(record) => ({
+            "data-date": record.date,
+            style: {
+              backgroundColor:
+                highlightedDate === record.date ? "#fff7e6" : undefined,
+              transition: "background-color 0.2s",
+              border:
+                highlightedDate === record.date
+                  ? "2px solid #FF6B00"
+                  : undefined,
+            },
+            className: highlightedDate === record.date ? "highlighted-row" : "",
+          })}
+          footer={() => (
+            <Space
+              className="w-full"
+              style={{ display: "flex", justifyContent: "space-between" }}
+            >
+              <Space>
+                <Tag color="blue">{selectedDetail?.totalDays} วัน</Tag>
+                <Tag color="green">{selectedDetail?.totalHours} ชม.</Tag>
+                <Tag color="red">หัก: {selectedDetail?.totalPenalty} บาท</Tag>
               </Space>
-            )}
-          />
-        </Card>
-      )}
+              <Text strong style={{ color: "#52c41a", fontSize: "16px" }}>
+                สุทธิ: {selectedDetail?.netPay.toLocaleString()} บาท
+              </Text>
+            </Space>
+          )}
+        />
+      </Modal>
 
       {/* Export Options */}
       <Card
@@ -345,11 +545,12 @@ export default function Step3Results({
         }
       >
         <Space.Compact block>
-          <Input
-            value={periodText}
-            onChange={(e) => setPeriodText(e.target.value)}
-            placeholder="ระบุช่วงวันที่ (เช่น 16-31 ธ.ค. 68)"
+          <DatePicker.RangePicker
+            value={dateRange}
+            onChange={(dates) => setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs] | null)}
+            format="DD/MM/YYYY"
             style={{ flex: 1 }}
+            placeholder={["วันที่เริ่มต้น", "วันที่สิ้นสุด"]}
           />
           <Button
             type="primary"
@@ -368,7 +569,7 @@ export default function Step3Results({
       {/* Back button */}
       <div className="flex justify-center">
         <Button size="large" onClick={onBack}>
-          🔙 กลับไปแก้ไขค่าจ้าง
+          กลับไปแก้ไขค่าจ้าง
         </Button>
       </div>
 
@@ -378,9 +579,9 @@ export default function Step3Results({
         title="แก้ไข Excel - ทุกคน"
         excelBase64={editorExcelData}
         onExport={(exportedBase64) => {
-          downloadExcel(
+          downloadBase64Excel(
             exportedBase64,
-            `เงินเดือนพนักงานทุกคน_${periodText || new Date().toISOString().split("T")[0]}.xlsx`
+            `เงินเดือนพนักงานทุกคน_${periodText || new Date().toISOString().split("T")[0]}.xlsx`,
           );
           setEditorExcelData(null);
           setIsEditorOpen(false);
