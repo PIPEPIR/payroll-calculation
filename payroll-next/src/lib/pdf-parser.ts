@@ -1,7 +1,12 @@
 /**
  * PDF parsing utility
  * Uses server-side Python parser with PyMuPDF for better Thai support
+ * Backend deployed separately on Railway/Render
  */
+
+// Configure your backend URL
+// Set this in .env.local: NEXT_PUBLIC_PDF_BACKEND_URL=https://your-app.railway.app
+const BACKEND_URL = process.env.NEXT_PUBLIC_PDF_BACKEND_URL || 'http://localhost:8000';
 
 export interface ParsedPdfData {
   staffId: string;
@@ -44,7 +49,7 @@ export async function parsePdfFile(file: File): Promise<PdfParseResult> {
   formData.append('file', file);
 
   try {
-    const response = await fetch('/api/parse-pdf', {
+    const response = await fetch(`${BACKEND_URL}/parse-pdf`, {
       method: 'POST',
       body: formData,
     });
