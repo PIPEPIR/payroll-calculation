@@ -1,12 +1,13 @@
 /**
  * PDF parsing utility
  * Uses server-side Python parser with PyMuPDF for better Thai support
- * Backend deployed separately on Railway/Render
+ * Backend deployed separately on Railway/Render/Hugging Face
  */
 
 // Configure your backend URL
 // Set this in .env.local: NEXT_PUBLIC_PDF_BACKEND_URL=https://your-app.railway.app
-const BACKEND_URL = process.env.NEXT_PUBLIC_PDF_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_PDF_BACKEND_URL || "http://localhost:7860";
 
 export interface ParsedPdfData {
   staffId: string;
@@ -42,28 +43,65 @@ export interface ParseStats {
 }
 
 /**
+ * Clean encoding artifacts from text (remove U+FFFD replacement characters)
+ */
+function cleanEncodingArtifacts(text: string): string {
+  return text
+    .replace(/\uFFFD/g, "")           // Remove replacement character ()
+    .replace(/\u0000/g, "")           // Remove null characters
+    .replace(/\u200B/g, "")           // Remove zero-width space
+    .replace(/\uFEFF/g, "")           // Remove BOM
+    .replace(/\u00A0/g, " ")          // Normalize non-breaking space
+    .trim();
+}
+
+/**
+ * Recursively clean all string values in an object
+ */
+function cleanObject<T>(obj: T): T {
+  if (typeof obj === "string") {
+    return cleanEncodingArtifacts(obj) as unknown as T;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanObject(item)) as unknown as T;
+  }
+  if (obj !== null && typeof obj === "object") {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      cleaned[key] = cleanObject(value);
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
+/**
  * Parse PDF using server-side Python API with PyMuPDF
  */
 export async function parsePdfFile(file: File): Promise<PdfParseResult> {
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append("file", file);
 
   try {
     const response = await fetch(`${BACKEND_URL}/parse-pdf`, {
-      method: 'POST',
+      method: "POST",
       body: formData,
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to parse PDF');
+      throw new Error(errorData.error || "Failed to parse PDF");
     }
 
     const result = await response.json();
-    return result;
+
+    // Clean encoding artifacts from the response
+    return cleanObject(result) as PdfParseResult;
   } catch (error) {
-    console.error('PDF parsing error:', error);
-    throw new Error(`ไม่สามารถอ่านไฟล์ PDF ได้: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("PDF parsing error:", error);
+    throw new Error(
+      `ไม่สามารถอ่านไฟล์ PDF ได้: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -92,7 +130,7 @@ export async function parseMultiplePdfFiles(files: File[]): Promise<{
     totalValid += result.stats.validRecords;
     totalInvalid += result.stats.invalidRecords;
 
-    result.data.forEach(d => {
+    result.data.forEach((d) => {
       if (d._isValid) {
         allEmployees.add(d.fullName);
       }
@@ -114,7 +152,10 @@ export async function parseMultiplePdfFiles(files: File[]): Promise<{
     allData,
     fileResults,
     totalStats: {
-      totalLines: fileResults.reduce((sum, r) => sum + r.result.stats.totalLines, 0),
+      totalLines: fileResults.reduce(
+        (sum, r) => sum + r.result.stats.totalLines,
+        0,
+      ),
       validRecords: totalValid,
       invalidRecords: totalInvalid,
       uniqueEmployees: allEmployees.size,
@@ -127,5 +168,5 @@ export async function parseMultiplePdfFiles(files: File[]): Promise<{
 }
 
 export function getValidRecords(data: ParsedPdfData[]): ParsedPdfData[] {
-  return data.filter(record => record._isValid);
+  return data.filter((record) => record._isValid);
 }
