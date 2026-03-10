@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 PDF Parsing API for Payroll System
-Deploy on Railway/Render/Fly.io
+Deploy on Hugging Face Spaces
 """
 
+import os
 import sys
 import json
 import re
-import codecs
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -180,4 +180,6 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Hugging Face Spaces uses port 7860
+    port = int(os.environ.get("PORT", 7860))
+    uvicorn.run(app, host="0.0.0.0", port=port)

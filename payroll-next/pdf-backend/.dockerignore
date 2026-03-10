@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.git
+.gitignore
+*.md
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+*.pdf
+temp/
+.tmp/
